@@ -1,0 +1,16 @@
+{
+  "files": {
+    "main.css": "/ghannamzeinab/MyMag/static/css/main.1e3b4b19.css",
+    "main.js": "/ghannamzeinab/MyMag/static/js/main.30f2886b.js",
+    "static/js/453.db71431f.chunk.js": "/ghannamzeinab/MyMag/static/js/453.db71431f.chunk.js",
+    "static/media/logo.svg": "/ghannamzeinab/MyMag/static/media/logo.6ce24c58023cc2f8fd88fe9d219db6c6.svg",
+    "index.html": "/ghannamzeinab/MyMag/index.html",
+    "main.1e3b4b19.css.map": "/ghannamzeinab/MyMag/static/css/main.1e3b4b19.css.map",
+    "main.30f2886b.js.map": "/ghannamzeinab/MyMag/static/js/main.30f2886b.js.map",
+    "453.db71431f.chunk.js.map": "/ghannamzeinab/MyMag/static/js/453.db71431f.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.1e3b4b19.css",
+    "static/js/main.30f2886b.js"
+  ]
+}
