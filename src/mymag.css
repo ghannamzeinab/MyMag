@@ -1,0 +1,132 @@
+/* mymag.css */
+body,
+html {
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+    background-color: #f5e6cc;
+    /* Very light brown */
+    /* Prevent horizontal scrolling */
+}
+/* Firefox Scrollbar */
+
+/* Firefox Scrollbar */
+* {
+    /* scrollbar-width: fa; */
+    /* Options: auto, thin, none */
+    scrollbar-color: yellow black;
+    /* Thumb color (yellow), Track color (black) */
+}
+
+/* Customizing scrollbar thumb and track specifically for Firefox */
+::-moz-scrollbar {
+    width: 50px;
+    /* Width of the scrollbar */
+}
+.settings-button{
+    color: black transparent;
+    background: black;;
+}
+
+::-moz-scrollbar-thumb {
+    background-color: yellow !important;
+    /* Yellow thumb */
+    border: 3px solid black !important;
+    /* Black border */
+    border-radius: 20px !important;
+    /* Rounded edges */
+}
+
+::-moz-scrollbar-track {
+    background: black;
+    /* Black track */
+}
+
+.container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    font-family: Arial, sans-serif;
+    width: 100vw;
+    /* Ensure full width */
+    box-sizing: border-box;
+    /* Prevent overflow from padding */
+}
+
+.text-input {
+    width: 80%;
+    height: 50x;
+    padding: 10px;
+    font-size: 12px;
+    margin-bottom: 2px;
+}
+
+.text-output {
+    width: 65%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    overflow-wrap: break-word;
+    /* Prevent long words from causing overflow */
+}
+
+.text-row {
+    display: flex;
+    justify-content: center;
+    /* Center words */
+    flex-wrap: wrap;
+    /* Ensure words wrap instead of causing horizontal scroll */
+    gap: 22px;
+}
+
+.text-word {
+    font-size: 67px ;
+    font-weight: bold;
+    letter-spacing: 3px;
+    text-shadow: 2px 2px 3px yellow;
+    margin-right: 5px;
+    white-space: nowrap;
+    /* Ensures words don't break but wrap properly */
+}
+
+.text-line {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+    /* Creates space between lines */
+}
+
+.line-break {
+    width: 100%;
+    height: 4px;
+    /* Adjust height for more visibility */
+    background-color: #85e085;
+    margin-top: 5px;
+    /* Space between text and line */
+    border-radius: 5px;
+    /* Soft rounded edges */
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+    width: 16px;
+    /* Increase width */
+}
+
+::-webkit-scrollbar-thumb {
+    background-color: yellow !important;
+    /* Yellow fill */
+    border: 5px solid black;
+    /* Black border */
+    border-radius: 20px;
+    /* Rounded edges */
+}
+
+::-webkit-scrollbar-track {
+    background: #f5e6cc !important;
+    /* Match the background */
+}
