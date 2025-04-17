@@ -1,0 +1,62 @@
+.confusing-input-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-top: 10px;
+}
+
+.confusing-input-row input[type="color"] {
+    padding: 0;
+    border: none;
+    height: 34px;
+    width: 50px;
+    background: transparent;
+}
+
+.settings-modal {
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    width: 400px;
+    background: #fff;
+    border: 2px solid #ccc;
+    border-radius: 12px;
+    padding: 20px;
+    z-index: 1000;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.settings-modal {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.settings-modal.hidden {
+    opacity: 0;
+    transform: translateX(100%);
+    pointer-events: none;
+}
+
+.settings-modal input {
+    width: 40px;
+    padding: 6px;
+    margin-bottom: 10px;
+    border-radius: 4px;
+    border: 3px solid #333;
+}
+
+.settings-modal label {
+    display: inline-block;
+    width: 100px;
+    font-weight: bold;
+    margin-bottom: 6px;
+}
+
+.settings-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
