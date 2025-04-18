@@ -155,7 +155,7 @@ html {
 
 .floating-buttons {
     position: fixed;
-    top: 100px;
+    top: 30px;
     /* adjust if needed to not overlap the gear icon */
     right: 20px;
     display: flex;
@@ -190,4 +190,11 @@ html {
     flex-direction: column;
     gap: 100px;
     z-index: 999;
+}
+
+.action-button i {
+    font-size: 32px;
+    /* Make icons bigger */
+    font-weight: 900;
+    /* Font Awesome bold */
 }
