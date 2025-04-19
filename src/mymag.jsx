@@ -3,13 +3,15 @@ import "./mymag.css";
 import SettingsPanel from "./SettingsPanel";
 
 const Mymag = () => {
+  const [showInfoModal, setShowInfoModal] = useState(false);
+
   const [text, setText] = useState("");
   const containerRef = useRef(null);
   const [wordsPerRow, setWordsPerRow] = useState(5);
   const [fontSize, setFontSize] = useState(90);
   const [wordSpacing, setWordSpacing] = useState(25);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [fontWeight, setFontWeight] = useState(500);
+  const [fontWeight, setFontWeight] = useState(600);
   const [showAsRTL, setShowAsRTL] = useState(false);
 
   const [letterColors, setLetterColors] = useState({
@@ -72,22 +74,37 @@ const Mymag = () => {
     setText("");
   };
 
-  const handleShowInfo = () => {
-    alert(
-      "📘 About MyMag\n\n" +
-      "MyMag is an easy-to-use tool to help people with vision impairment read quicker!\n" +
-      "This is particularly useful when a large text has to be read.\n\n" +
-      "🧘‍♀️ Lay back, smile and enjoy reading!\n\n\n" +
-      "👤 About the Author:\n" +
-      "Zeinab Ghannam\n\n" +
-      "🔗 LinkedIn: linkedin.com/in/zeinabghannam\n" +
-      "🔗 GitHub: github.com/ghannamzeinab"
-    );
-  };
+ 
 
   const handleAutoScroll = () => {
     window.scrollBy({ top: 500, behavior: "smooth" });
   };
+
+  /* global html2pdf */
+
+const handleDownloadPDF = () => {
+  const element = document.getElementById("printable-text");
+
+  if (!element) return;
+
+  setTimeout(() => {
+    const opt = {
+      margin: 0,
+      filename: "mymag-output.pdf",
+      image: { type: "jpeg", quality: 0.98 },
+      html2canvas: {
+        scale: 2,
+        useCORS: true, // if external fonts/images used
+        logging: true
+      },
+      jsPDF: { unit: "px", format: "a4", orientation: "portrait" }
+    };
+
+    html2pdf().set(opt).from(element).save();
+  }, 100); // wait 100ms to ensure layout is ready
+};
+
+
 
   return (
     <div className="container" ref={containerRef}>
@@ -103,15 +120,30 @@ const Mymag = () => {
         setFontWeight={setFontWeight}
         letterColors={letterColors}
         setLetterColors={setLetterColors}
+        setIsSettingsOpen = { setIsSettingsOpen }
       />
 
     <div className="left-floating-buttons">
-  <button className="action-button" onClick={handleShowInfo} title="About MyMag">
-    <i className="fa-solid fa-info"></i>
-  </button>
+  <button
+  className="action-button"
+  onClick={() => setShowInfoModal(true)}
+  title="About MyMag"
+>
+  <i className="fa-solid fa-info"></i>
+</button>
+
   <button className="action-button" onClick={handleAutoScroll} title="Auto Scroll Down">
     <i className="fa-solid fa-arrow-down"></i>
-  </button>
+        </button>
+        
+         {/* <button
+    className="action-button"
+    onClick={handleDownloadPDF}
+    title="Download Output as PDF"
+  >
+    <i className="fa-solid fa-download"></i>
+        </button> */}
+        
 </div>
 
 <div className="floating-buttons">
@@ -128,7 +160,7 @@ const Mymag = () => {
   <button
     className="action-button"
     onClick={handlePaste}
-    title="Paste from Clipboard"
+    title="Paste a text"
   >
     <i className="fa-solid fa-paste"></i>
   </button>
@@ -173,6 +205,7 @@ const Mymag = () => {
       />
 
       <div
+        id="printable-text"
         className="text-output"
         style={{
           direction: showAsRTL ? "rtl" : "ltr",
@@ -223,7 +256,43 @@ const Mymag = () => {
           </div>
         ))}
       </div>
+      {showInfoModal && (
+  <div className="modal-overlay" onClick={() => setShowInfoModal(false)}>
+          <div
+            
+      className="modal-content"
+      onClick={(e) => e.stopPropagation()} // prevent closing when clicking inside
+          >
+            <button className="modal-close-x" onClick={() => setShowInfoModal(false)}>
+  <i className="fa-solid fa-xmark"></i>
+</button>
+      <h2><i className="fa-solid fa-book-open"></i> About <strong>MyMag</strong></h2>
+      <p>
+        <i className="fa-solid fa-glasses"></i> MyMag is an easy-to-use tool to help people with vision impairment read quicker!
+        <br /><br />
+        This is particularly useful when a large text has to be read.
+        <br /><br />
+        <i className="fa-solid fa-face-smile"></i> Lay back, smile and enjoy reading!
+        <br /><br />
+        <i className="fa-solid fa-user"></i> About the Author:
+        Zeinab Ghannam
+        <br /><br />
+        
+        <i className="fa-brands fa-linkedin"></i> LinkedIn: <a href="https://linkedin.com/in/zeinabghannam" target="_blank" rel="noopener noreferrer">
+  linkedin.com/in/zeinabghannam
+</a><br />
+        <i className="fa-brands fa-github"></i> Source Code: <a href="https://github.com/ghannamzeinab" target="_blank" rel="noopener noreferrer">
+  github.com/ghannamzeinab
+</a>
+      </p>
+      <button className="close-button" onClick={() => setShowInfoModal(false)}>
+        <i className="fa-solid fa-xmark"></i> Close
+      </button>
     </div>
+  </div>
+)}
+
+    </div>    
   );
 };
 
