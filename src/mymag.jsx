@@ -10,27 +10,40 @@ const LONG_THRESHOLD = 16;
 const BIG_FONT_THRESHOLD = 150;
 const TWO_WORD_WRAP_THRESHOLD = 140;
 
-/* ===== Defaults in one place (used by reset button) ===== */
+/* ===== Defaults — auto-scroll values are now in a SANE range ===== */
 const DEFAULTS = {
-  autoIntervalMs: 55555, // "Normal" — ms per line (higher = slower)
+  autoIntervalMs: 3000, // Normal: 3 s per line
   fontSize: 48,
   wordSpacing: 25,
-  fontWeight: 700, // Bold
+  fontWeight: 700,
   showAsRTL: false,
   darkMode: false,
-  bodyBgColor: "#e5e7eb", // light gray
+  bodyBgColor: "#e5e7eb",
   btnBgLeft: "#ffffff",
   btnBgRight: "#ffffff",
   showFloatingButtons: true,
   showBorder: true,
   showTextArea: true,
   showShadow: true,
+  currentLineIntensity: 35,
   letterColors: {
     m: "#0057E9", M: "#0057E9",
     n: "#699953", N: "#699953",
     r: "#de7c00", Q: "#E11845",
     l: "#FF00BD", w: "#E11845", W: "#E11845",
   },
+};
+
+/* Migrate absurdly-slow old presets (from previous versions of MyMag)
+   to the new sensible values. Anything > 12 s/line is treated as legacy. */
+const migrateAutoIntervalMs = (ms) => {
+  const n = Number(ms);
+  if (!Number.isFinite(n) || n <= 0) return DEFAULTS.autoIntervalMs;
+  if (n <= 12000) return n; // already in sane range
+  if (n >= 80000) return 6000;   // legacy slow
+  if (n >= 40000) return 3000;   // legacy normal
+  if (n >= 25000) return 2000;   // legacy "a bit faster"
+  return 1200;                   // legacy fast
 };
 
 /* ---------- Color/contrast helpers ---------- */
@@ -71,7 +84,7 @@ const borderForBg = (pageBgHex) => {
   return contrastRatio(black, pageBgHex) >= 3 ? black : white;
 };
 
-/* ---------- split helpers (produce display lines) ---------- */
+/* ---------- split helpers (unchanged from previous version) ---------- */
 const urlToLines = (url) => {
   const lines = [];
   let s = url.trim();
@@ -143,7 +156,6 @@ const classicDoiToLines = (s) => {
   return out;
 };
 
-/* ---------- mixed-content expansion ---------- */
 const PUNCT_FOLLOW = /[)\],.!?;:]+/;
 const firstMatch = (text, regex) => {
   const flags = regex.flags.includes("g") ? regex.flags : regex.flags + "g";
@@ -169,7 +181,6 @@ const findNextSpecial = (text) => {
   return cands[0];
 };
 
-// normalize an href for anchor (ensure scheme)
 const normalizeHref = (raw) => {
   const trimmed = raw.trim();
   if (/^https?:\/\//i.test(trimmed)) return trimmed;
@@ -177,7 +188,6 @@ const normalizeHref = (raw) => {
   return trimmed;
 };
 
-// returns array of { text, isSplitProduct, splitKind?, hyphenAppended?, isLink?, href? }
 const expandLineMixed = (line) => {
   const out = [];
   let rest = line;
@@ -195,7 +205,6 @@ const expandLineMixed = (line) => {
     let core = m.value;
     let after = rest.slice(m.index + m.length);
 
-    // attach trailing punctuation
     let trailing = "";
     while (after.length > 0 && PUNCT_FOLLOW.test(after[0])) {
       trailing += after[0];
@@ -212,11 +221,8 @@ const expandLineMixed = (line) => {
       else if (/^\d+(?:\.\d+)+$/.test(core)) { lines = dottedDigitsToLines(core); kind = "dotted"; }
 
       if (lines.length > 0) {
-        // apply trailing punctuation to last split line
         lines[lines.length - 1] = `${lines[lines.length - 1]}${trailing}`;
-        // emit split lines
         lines.forEach((t) => out.push({ text: t, isSplitProduct: true, splitKind: kind }));
-        // if it was a URL, also append a clickable "link" line
         if (m.type === "url") {
           out.push({
             text: "link",
@@ -240,46 +246,91 @@ const expandLineMixed = (line) => {
   return out;
 };
 
-/* ---------- long-words hyphenation for large font ---------- */
-const LONGWORD_RE = /\b[A-Za-z]{16,}\b/;
-const hyphenateLongWordsForLargeFont = (fragment, fontSize) => {
-  if (fontSize < BIG_FONT_THRESHOLD) return [{ text: fragment, isSplitProduct: false }];
+const RTL_CHAR_RE = /[\u0590-\u05FF\u0600-\u06FF\u0700-\u074F\u0750-\u077F\u08A0-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/;
+const isRTLText = (s) => RTL_CHAR_RE.test(s || "");
 
-  let rest = fragment;
-  const out = [];
-  while (true) {
-    const m = LONGWORD_RE.exec(rest);
-    if (!m) break;
+const charsPerLineBudget = (fontSize) => {
+  if (typeof window === "undefined") return 999;
+  const availPx = Math.max(200, window.innerWidth * 0.8 - 24);
+  const glyphPx = Math.max(8, fontSize * 0.62 + 3);
+  const budget = Math.floor(availPx / glyphPx);
+  return Math.max(4, budget);
+};
 
-    const before = rest.slice(0, m.index);
-    const word = m[0];
-    const after = rest.slice(m.index + word.length);
-
-    if (before.trim().length > 0) out.push({ text: before.trim(), isSplitProduct: false });
-
-    const half = Math.floor(word.length / 2);
-    const first = word.slice(0, half);
-    const second = word.slice(half);
-
-    out.push({ text: first + "-", isSplitProduct: true, splitKind: "hyphenWord", hyphenAppended: true });
-    out.push({ text: second, isSplitProduct: true, splitKind: "hyphenWord", hyphenAppended: false });
-
-    rest = after;
+const splitLongWordByBudget = (word, budget) => {
+  const chunkSize = Math.max(2, budget - 1);
+  if (word.length <= budget) {
+    return [{ text: word, isSplitProduct: false }];
   }
-  if (rest.trim().length > 0) out.push({ text: rest.trim(), isSplitProduct: false });
+  const pieces = [];
+  let i = 0;
+  while (i < word.length) {
+    const remaining = word.length - i;
+    if (remaining <= budget) {
+      pieces.push({
+        text: word.slice(i),
+        isSplitProduct: true,
+        splitKind: "hyphenWord",
+        hyphenAppended: false,
+      });
+      break;
+    }
+    pieces.push({
+      text: word.slice(i, i + chunkSize) + "-",
+      isSplitProduct: true,
+      splitKind: "hyphenWord",
+      hyphenAppended: true,
+    });
+    i += chunkSize;
+  }
+  return pieces;
+};
+
+const hyphenateLongWordsForLargeFont = (fragment, fontSize) => {
+  const budget = charsPerLineBudget(fontSize);
+  const hasLongRun = /\S{16,}/u.test(fragment) || fragment.split(/\s+/).some((w) => w.length > budget);
+  if (!hasLongRun && fontSize < BIG_FONT_THRESHOLD) {
+    return [{ text: fragment, isSplitProduct: false }];
+  }
+
+  const tokens = fragment.split(/(\s+)/);
+  const out = [];
+  let buffer = "";
+
+  const flushBuffer = () => {
+    const t = buffer.trim();
+    if (t.length > 0) out.push({ text: t, isSplitProduct: false });
+    buffer = "";
+  };
+
+  for (const tok of tokens) {
+    if (/^\s+$/.test(tok)) {
+      buffer += tok;
+      continue;
+    }
+    if (tok.length > budget) {
+      flushBuffer();
+      const pieces = splitLongWordByBudget(tok, budget);
+      pieces.forEach((p) => out.push(p));
+    } else {
+      buffer += tok;
+    }
+  }
+  flushBuffer();
   return out.length ? out : [{ text: fragment, isSplitProduct: false }];
 };
 
-/* ---------- 2 words per line if large font ---------- */
 const twoWordWrap = (items, fontSize) => {
   if (fontSize <= TWO_WORD_WRAP_THRESHOLD) return items;
   const out = [];
   for (const item of items) {
-    if (item.isLink) { out.push(item); continue; } // don't wrap link row
+    if (item.isLink) { out.push(item); continue; }
     const lineText = item.text ?? "";
     const trimmed = lineText.trim();
     const isMath = trimmed.startsWith("\\[") && trimmed.endsWith("\\]");
     if (isMath) { out.push(item); continue; }
+
+    if (item.isSplitProduct) { out.push(item); continue; }
 
     const words = trimmed.length ? trimmed.split(/\s+/).filter(Boolean) : [];
     if (words.length <= 2) { out.push(item); continue; }
@@ -297,21 +348,18 @@ const Mymag = () => {
   const [text, setText] = useState("");
   const containerRef = useRef(null);
 
-  // --- Continuous auto-scroll (RAF), speed = ms per line ---
   const rafRef = useRef(null);
-  const lastTsRef = useRef(0);
-  const stepRef = useRef(null); // keep latest step handler
   const [autoActive, setAutoActive] = useState(false);
-  const [autoIntervalMs, setAutoIntervalMs] = useState(DEFAULTS.autoIntervalMs); // ms per line
+  const [autoIntervalMs, setAutoIntervalMs] = useState(DEFAULTS.autoIntervalMs);
 
-  // defaults
+  const [currentLineIdx, setCurrentLineIdx] = useState(0);
+
   const [fontSize, setFontSize] = useState(DEFAULTS.fontSize);
   const [wordSpacing, setWordSpacing] = useState(DEFAULTS.wordSpacing);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [fontWeight, setFontWeight] = useState(DEFAULTS.fontWeight);
   const [showAsRTL, setShowAsRTL] = useState(DEFAULTS.showAsRTL);
 
-  // customizations
   const [darkMode, setDarkMode] = useState(DEFAULTS.darkMode);
   const [bodyBgColor, setBodyBgColor] = useState(DEFAULTS.bodyBgColor);
   const [btnBgLeft, setBtnBgLeft] = useState(DEFAULTS.btnBgLeft);
@@ -320,10 +368,20 @@ const Mymag = () => {
   const [showBorder, setShowBorder] = useState(DEFAULTS.showBorder);
   const [showTextArea, setShowTextArea] = useState(DEFAULTS.showTextArea);
   const [showShadow, setShowShadow] = useState(DEFAULTS.showShadow);
+  const [currentLineIntensity, setCurrentLineIntensity] = useState(DEFAULTS.currentLineIntensity);
 
   const [letterColors, setLetterColors] = useState(DEFAULTS.letterColors);
 
-  /* -------- Persisted settings load -------- */
+  const [viewportW, setViewportW] = useState(
+    typeof window !== "undefined" ? window.innerWidth : 1024
+  );
+  useEffect(() => {
+    const onResize = () => setViewportW(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  /* -------- Load persisted settings + migrate old slow speeds -------- */
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -344,18 +402,26 @@ const Mymag = () => {
         if (typeof s.btnBgLeft === "string") setBtnBgLeft(s.btnBgLeft);
         if (typeof s.btnBgRight === "string") setBtnBgRight(s.btnBgRight);
         if (typeof s.showFloatingButtons === "boolean") setShowFloatingButtons(s.showFloatingButtons);
-        if (typeof s.autoIntervalMs === "number") setAutoIntervalMs(s.autoIntervalMs);
+        if (typeof s.autoIntervalMs === "number") {
+          const migrated = migrateAutoIntervalMs(s.autoIntervalMs);
+          if (migrated !== s.autoIntervalMs) {
+            console.info(
+              "[MyMag] Migrated saved auto-scroll speed:",
+              s.autoIntervalMs, "ms/line ->", migrated, "ms/line"
+            );
+          }
+          setAutoIntervalMs(migrated);
+        }
         if (typeof s.showBorder === "boolean") setShowBorder(s.showBorder);
         if (typeof s.showTextArea === "boolean") setShowTextArea(s.showTextArea);
         if (typeof s.showShadow === "boolean") setShowShadow(s.showShadow);
+        if (typeof s.currentLineIntensity === "number") setCurrentLineIntensity(s.currentLineIntensity);
       }
     } catch {}
   }, []);
 
-  /* -------- Apply page background & dark mode -------- */
   useEffect(() => {
     const bg = darkMode ? "#111111" : (bodyBgColor || "#e5e7eb");
-    // apply to full page, html + body
     document.documentElement.style.backgroundColor = bg;
     document.body.style.backgroundColor = bg;
     document.body.style.color = darkMode ? "#ffffff" : "#000000";
@@ -363,20 +429,9 @@ const Mymag = () => {
 
   const saveSettings = () => {
     const payload = JSON.stringify({
-      fontSize,
-      wordSpacing,
-      fontWeight,
-      letterColors,
-      showAsRTL,
-      darkMode,
-      bodyBgColor,
-      btnBgLeft,
-      btnBgRight,
-      showFloatingButtons,
-      autoIntervalMs,
-      showBorder,
-      showTextArea,
-      showShadow,
+      fontSize, wordSpacing, fontWeight, letterColors, showAsRTL,
+      darkMode, bodyBgColor, btnBgLeft, btnBgRight, showFloatingButtons,
+      autoIntervalMs, showBorder, showTextArea, showShadow, currentLineIntensity,
     });
     try { localStorage.setItem(STORAGE_KEY, payload); } catch {}
     try {
@@ -391,7 +446,6 @@ const Mymag = () => {
       document.cookie = `${encodeURIComponent(STORAGE_KEY)}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax`;
     } catch {}
 
-    // restore defaults
     setAutoIntervalMs(DEFAULTS.autoIntervalMs);
     setFontSize(DEFAULTS.fontSize);
     setWordSpacing(DEFAULTS.wordSpacing);
@@ -405,12 +459,12 @@ const Mymag = () => {
     setShowBorder(DEFAULTS.showBorder);
     setShowTextArea(DEFAULTS.showTextArea);
     setShowShadow(DEFAULTS.showShadow);
+    setCurrentLineIntensity(DEFAULTS.currentLineIntensity);
     setLetterColors(DEFAULTS.letterColors);
   };
 
   const handleChange = (e) => setText(e.target.value);
 
-  // plus-chunking (kept)
   const formatText = (inputText) => {
     return inputText.split("\n").flatMap((line) => {
       if (line.length > 30 && line.includes("+")) {
@@ -438,8 +492,6 @@ const Mymag = () => {
     }
   };
 
-  /* ---------- Auto-scroll (RAF): continuous until toggled off
-       Scroll the WHOLE PAGE so the textarea can scroll away ---------- */
   const getLineHeightPx = useCallback(() => {
     const el = document.querySelector("#printable-text .text-line");
     if (!el) return Math.max(fontSize + 20, 80);
@@ -447,59 +499,148 @@ const Mymag = () => {
     return rect.height || Math.max(fontSize + 20, 80);
   }, [fontSize]);
 
-  useEffect(() => {
-    stepRef.current = (ts) => {
-      if (!autoActive) { rafRef.current = null; return; }
+  const updateCurrentLineFromScroll = useCallback(() => {
+    const nodes = document.querySelectorAll("#printable-text .text-line");
+    if (!nodes.length) return;
+    const sight = window.innerHeight * 0.33;
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    nodes.forEach((n, i) => {
+      const r = n.getBoundingClientRect();
+      const center = r.top + r.height / 2;
+      const d = Math.abs(center - sight);
+      if (d < bestDist) {
+        bestDist = d;
+        bestIdx = i;
+      }
+    });
+    setCurrentLineIdx(bestIdx);
+  }, []);
 
+  useEffect(() => {
+    const onScroll = () => updateCurrentLineFromScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    updateCurrentLineFromScroll();
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [updateCurrentLineFromScroll, text, fontSize, viewportW]);
+
+  /* =========================================================
+     ✅ Auto-scroll — single self-contained effect.
+     - Keeps a private `virtualY` (float) so subpixel rounding
+       in window.scrollY can't stall the loop.
+     - Uses sensible ms-per-line values (3000 = ~50 px/sec for
+       a 150 px line height — clearly visible).
+     - Logs diagnostics so you can confirm in DevTools.
+     ========================================================= */
+  useEffect(() => {
+    if (!autoActive) {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      return;
+    }
+
+    // Capture the docs height up front for the diagnostic message.
+    const docElInit = document.scrollingElement || document.documentElement;
+    const docHeightInit = Math.max(
+      docElInit.scrollHeight || 0,
+      document.body.scrollHeight || 0,
+      document.documentElement.scrollHeight || 0
+    );
+    const initialMaxScroll = docHeightInit - window.innerHeight;
+
+    console.info(
+      "[MyMag] Auto-scroll START",
+      "| pace:", autoIntervalMs, "ms/line",
+      "| lineHeight:", Math.round(getLineHeightPx()), "px",
+      "| docHeight:", docHeightInit, "px",
+      "| viewport:", window.innerHeight, "px",
+      "| scrollable:", initialMaxScroll, "px"
+    );
+
+    // Float-accurate position tracker — independent of window.scrollY rounding.
+    let virtualY = window.scrollY;
+    let lastTs = 0;
+    let stoppedReason = null;
+
+    const step = (ts) => {
       const docEl = document.scrollingElement || document.documentElement;
-      const maxScroll = (docEl.scrollHeight || 0) - window.innerHeight;
+      const docHeight = Math.max(
+        docEl.scrollHeight || 0,
+        document.body.scrollHeight || 0,
+        document.documentElement.scrollHeight || 0
+      );
+      const maxScroll = docHeight - window.innerHeight;
+
       if (maxScroll <= 0) {
+        stoppedReason = "nothing-to-scroll";
         setAutoActive(false);
         rafRef.current = null;
         return;
       }
 
-      if (!lastTsRef.current) lastTsRef.current = ts;
-      const dtMs = ts - lastTsRef.current;
-      lastTsRef.current = ts;
+      // First tick: seed the timestamp, scroll on next frame.
+      if (!lastTs) {
+        lastTs = ts;
+        rafRef.current = requestAnimationFrame(step);
+        return;
+      }
 
-      // pixels per ms so that one line distance is covered in autoIntervalMs
-      const pxPerMs = getLineHeightPx() / Math.max(20, Number(autoIntervalMs) || DEFAULTS.autoIntervalMs);
+      const dtMs = ts - lastTs;
+      lastTs = ts;
+
+      const lineHeight = getLineHeightPx();
+      const intervalMs = Math.max(200, Number(autoIntervalMs) || DEFAULTS.autoIntervalMs);
+      const pxPerMs = lineHeight / intervalMs;
       const dy = pxPerMs * dtMs;
 
-      const nextY = Math.min(window.scrollY + dy, maxScroll);
-      window.scrollTo(0, nextY);
+      virtualY = Math.min(virtualY + dy, maxScroll);
+      window.scrollTo(0, virtualY);
 
-      if (nextY >= maxScroll - 1) {
-        // reached end: stop and switch icon back to "play"
+      if (virtualY >= maxScroll - 0.5) {
+        stoppedReason = "reached-end";
         setAutoActive(false);
         rafRef.current = null;
         return;
       }
-      rafRef.current = requestAnimationFrame(stepRef.current);
+      rafRef.current = requestAnimationFrame(step);
+    };
+
+    rafRef.current = requestAnimationFrame(step);
+
+    return () => {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      if (stoppedReason) {
+        console.info("[MyMag] Auto-scroll STOP —", stoppedReason);
+      } else {
+        console.info("[MyMag] Auto-scroll STOP — user toggle");
+      }
     };
   }, [autoActive, autoIntervalMs, getLineHeightPx]);
 
-  useEffect(() => {
-    if (autoActive && !rafRef.current && stepRef.current) {
-      lastTsRef.current = 0;
-      rafRef.current = requestAnimationFrame(stepRef.current);
-    }
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    };
-  }, [autoActive]);
-
   const toggleAutoScroll = () => {
-    setAutoActive((prev) => {
-      const next = !prev;
-      if (next && !rafRef.current && stepRef.current) {
-        lastTsRef.current = 0;
-        rafRef.current = requestAnimationFrame(stepRef.current);
+    if (!autoActive) {
+      const docEl = document.scrollingElement || document.documentElement;
+      const docHeight = Math.max(
+        docEl.scrollHeight || 0,
+        document.body.scrollHeight || 0,
+        document.documentElement.scrollHeight || 0
+      );
+      const maxScroll = docHeight - window.innerHeight;
+      if (!text || maxScroll <= 0) {
+        console.warn(
+          "[MyMag] Auto-scroll not started: nothing to scroll.",
+          "Text length:", text.length,
+          "| Document scrollable height:", maxScroll, "px"
+        );
+        return;
       }
-      return next;
-    });
+    }
+    setAutoActive((prev) => !prev);
   };
 
   const renderWithKatex = (latex) => {
@@ -511,14 +652,14 @@ const Mymag = () => {
     }
   };
 
-  // pipeline for display lines
   const mixedExpanded = formattedText.flatMap((line) => expandLineMixed(line));
   const withHyphenated = mixedExpanded.flatMap((frag) =>
     frag.isSplitProduct ? [frag] : hyphenateLongWordsForLargeFont(frag.text, fontSize)
   );
+  // eslint-disable-next-line no-unused-vars
+  const _vw = viewportW;
   const displayLines = twoWordWrap(withHyphenated, fontSize);
 
-  // Accessible colors for controls and border
   const pageBg = darkMode ? "#111111" : (bodyBgColor || "#e5e7eb");
   const leftBtnBgEff = normalizeBtnBg(btnBgLeft, pageBg, darkMode);
   const rightBtnBgEff = normalizeBtnBg(btnBgRight, pageBg, darkMode);
@@ -526,60 +667,69 @@ const Mymag = () => {
   const rightIconEff = iconOn(rightBtnBgEff);
   const borderColorEff = borderForBg(pageBg);
 
-  // Public logo path (robust across CRA/Vite)
+  const clampedIntensity = Math.max(0, Math.min(100, Number(currentLineIntensity) || 0));
+  const intensity01 = clampedIntensity / 100;
+  const maxAlpha = darkMode ? 0.55 : 0.85;
+  const highlightAlpha = (intensity01 * maxAlpha).toFixed(3);
+  const currentLineBg =
+    clampedIntensity === 0
+      ? "transparent"
+      : `rgba(250, 204, 21, ${highlightAlpha})`;
+  const ringAlpha = clampedIntensity === 0 ? 0 : Math.min(0.7, intensity01 * 0.7);
+  const currentLineRing =
+    clampedIntensity === 0
+      ? "none"
+      : `inset 0 0 0 2px rgba(250, 204, 21, ${ringAlpha.toFixed(3)})`;
+
   const logoSrc = `${process.env.PUBLIC_URL || ""}/mymag.png`;
 
   return (
     <div className="container" ref={containerRef}>
       <SettingsPanel
-  className={isSettingsOpen ? "" : "hidden"}
-  fontSize={fontSize}
-  setFontSize={setFontSize}
-  wordSpacing={wordSpacing}
-  setWordSpacing={setWordSpacing}
-  fontWeight={fontWeight}
-  setFontWeight={setFontWeight}
-  letterColors={letterColors}
-  setLetterColors={setLetterColors}
-  setIsSettingsOpen={setIsSettingsOpen}
-  // ✅ actually persist and close
-  onSaveSettings={() => { saveSettings(); setIsSettingsOpen(false); }}
-  // ✅ reset, persist defaults, and close
-  onResetDefaults={() => { resetToDefaults(); saveSettings(); setIsSettingsOpen(false); }}
-
-  showAsRTL={showAsRTL}
-  setShowAsRTL={setShowAsRTL}
-  darkMode={darkMode}
-  setDarkMode={setDarkMode}
-  bodyBgColor={bodyBgColor}
-  setBodyBgColor={setBodyBgColor}
-  btnBgLeft={btnBgLeft}
-  setBtnBgLeft={setBtnBgLeft}
-  btnBgRight={btnBgRight}
-  setBtnBgRight={setBtnBgRight}
-  showFloatingButtons={showFloatingButtons}
-  setShowFloatingButtons={setShowFloatingButtons}
-  autoIntervalMs={autoIntervalMs}
-  setAutoIntervalMs={setAutoIntervalMs}
-  showBorder={showBorder}
-  setShowBorder={setShowBorder}
-  showTextArea={showTextArea}
-  setShowTextArea={setShowTextArea}
-  showShadow={showShadow}
-  setShowShadow={setShowShadow}
-/>
-
+        className={isSettingsOpen ? "" : "hidden"}
+        fontSize={fontSize}
+        setFontSize={setFontSize}
+        wordSpacing={wordSpacing}
+        setWordSpacing={setWordSpacing}
+        fontWeight={fontWeight}
+        setFontWeight={setFontWeight}
+        letterColors={letterColors}
+        setLetterColors={setLetterColors}
+        setIsSettingsOpen={setIsSettingsOpen}
+        onSaveSettings={() => { saveSettings(); setIsSettingsOpen(false); }}
+        onResetDefaults={() => { resetToDefaults(); saveSettings(); setIsSettingsOpen(false); }}
+        showAsRTL={showAsRTL}
+        setShowAsRTL={setShowAsRTL}
+        darkMode={darkMode}
+        setDarkMode={setDarkMode}
+        bodyBgColor={bodyBgColor}
+        setBodyBgColor={setBodyBgColor}
+        btnBgLeft={btnBgLeft}
+        setBtnBgLeft={setBtnBgLeft}
+        btnBgRight={btnBgRight}
+        setBtnBgRight={setBtnBgRight}
+        showFloatingButtons={showFloatingButtons}
+        setShowFloatingButtons={setShowFloatingButtons}
+        autoIntervalMs={autoIntervalMs}
+        setAutoIntervalMs={setAutoIntervalMs}
+        showBorder={showBorder}
+        setShowBorder={setShowBorder}
+        showTextArea={showTextArea}
+        setShowTextArea={setShowTextArea}
+        showShadow={showShadow}
+        setShowShadow={setShowShadow}
+        currentLineIntensity={currentLineIntensity}
+        setCurrentLineIntensity={setCurrentLineIntensity}
+      />
 
       {showFloatingButtons && (
         <div className="left-floating-buttons">
-          {/* App Logo */}
           <img
             src={logoSrc}
             alt="MyMag logo"
             className="app-logo"
             title="MyMag"
             onError={(e) => {
-              // fallback if PUBLIC_URL path fails
               if (e.currentTarget.src.endsWith("/mymag.png")) {
                 e.currentTarget.src = "mymag.png";
               }
@@ -590,16 +740,17 @@ const Mymag = () => {
             className="action-button"
             onClick={() => setShowInfoModal(true)}
             title="About MyMag"
+            aria-label="About MyMag"
             style={{ backgroundColor: leftBtnBgEff }}
           >
             <i className="fa-solid fa-info" style={{ color: leftIconEff }}></i>
           </button>
 
-          {/* Dark mode quick toggle */}
           <button
             className="action-button"
             onClick={() => setDarkMode((v) => !v)}
             title={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+            aria-label={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
             style={{ backgroundColor: leftBtnBgEff }}
           >
             <i
@@ -608,18 +759,19 @@ const Mymag = () => {
             ></i>
           </button>
 
-          {/* Auto-scroll toggle with icon change: play/pause */}
-          {/* <button
-            className="action-button"
+          <button
+            className={`action-button ${autoActive ? "is-playing" : ""}`}
             onClick={toggleAutoScroll}
             title={autoActive ? "Pause Auto Scroll" : "Start Auto Scroll"}
+            aria-label={autoActive ? "Pause Auto Scroll" : "Start Auto Scroll"}
+            aria-pressed={autoActive}
             style={{ backgroundColor: leftBtnBgEff }}
           >
             <i
               className={`fa-solid ${autoActive ? "fa-pause" : "fa-play"}`}
               style={{ color: leftIconEff }}
             ></i>
-          </button> */}
+          </button>
         </div>
       )}
 
@@ -629,6 +781,7 @@ const Mymag = () => {
             className="action-button"
             onClick={() => setIsSettingsOpen(!isSettingsOpen)}
             title="Settings"
+            aria-label="Open Settings"
             style={{ backgroundColor: rightBtnBgEff }}
           >
             <i className="fa-solid fa-gear" style={{ color: rightIconEff }}></i>
@@ -637,6 +790,7 @@ const Mymag = () => {
             className="action-button"
             onClick={handlePaste}
             title="Paste a text"
+            aria-label="Paste a text"
             style={{ backgroundColor: rightBtnBgEff }}
           >
             <i className="fa-solid fa-paste" style={{ color: rightIconEff }}></i>
@@ -645,6 +799,7 @@ const Mymag = () => {
             className="action-button"
             onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
             title="Scroll to Top"
+            aria-label="Scroll to Top"
             style={{ backgroundColor: rightBtnBgEff }}
           >
             <i className="fa-solid fa-arrow-up" style={{ color: rightIconEff }}></i>
@@ -653,6 +808,7 @@ const Mymag = () => {
             className="action-button"
             onClick={() => setText("")}
             title="Clear Text"
+            aria-label="Clear Text"
             style={{ backgroundColor: rightBtnBgEff }}
           >
             <i className="fa-solid fa-trash" style={{ color: rightIconEff }}></i>
@@ -661,6 +817,7 @@ const Mymag = () => {
             className="action-button"
             onClick={() => setShowAsRTL(!showAsRTL)}
             title={showAsRTL ? "Switch to Left-to-Right" : "Switch to Right-to-Left"}
+            aria-label={showAsRTL ? "Switch to Left-to-Right" : "Switch to Right-to-Left"}
             style={{ backgroundColor: rightBtnBgEff }}
           >
             <i
@@ -687,30 +844,46 @@ const Mymag = () => {
         style={{
           direction: showAsRTL ? "rtl" : "ltr",
           textAlign: showAsRTL ? "right" : "left",
-          overflowX: "auto",
-          whiteSpace: "nowrap",
+          overflowX: "hidden",
+          whiteSpace: "normal",
           width: "80%",
           border: showBorder ? `1px solid ${borderColorEff}` : "none",
         }}
       >
         {displayLines.map((item, lineIndex) => {
           const lineText = item.text;
-          const isMath = lineText.trim().startsWith("\\[") && lineText.trim().endsWith("\\]");
+          const trimmedLine = (lineText || "").trim();
+          const isMath = trimmedLine.startsWith("\\[") && trimmedLine.endsWith("\\]");
+          const lineIsRTL = isRTLText(lineText) || showAsRTL;
+          const isCurrent = lineIndex === currentLineIdx;
+
+          const currentStyle =
+            isCurrent && clampedIntensity > 0
+              ? { backgroundColor: currentLineBg, boxShadow: currentLineRing }
+              : undefined;
 
           return (
-            <div key={lineIndex} className="text-line">
+            <div
+              key={lineIndex}
+              className={`text-line ${isCurrent && clampedIntensity > 0 ? "current-line" : ""}`}
+              style={currentStyle}
+              data-line-index={lineIndex}
+            >
               {isMath ? (
                 <div
                   className="math-block"
-                  dangerouslySetInnerHTML={{ __html: renderWithKatex(lineText.trim().slice(2, -2)) }}
+                  dangerouslySetInnerHTML={{ __html: renderWithKatex(trimmedLine.slice(2, -2)) }}
                 />
               ) : item.isLink ? (
                 <div
                   className="text-row"
                   style={{
                     display: "flex",
-                    flexDirection: showAsRTL ? "row-reverse" : "row",
-                    justifyContent: showAsRTL ? "flex-end" : "flex-start",
+                    flexDirection: "row",
+                    justifyContent: lineIsRTL ? "flex-end" : "flex-start",
+                    direction: lineIsRTL ? "rtl" : "ltr",
+                    unicodeBidi: "isolate",
+                    width: "100%",
                   }}
                 >
                   <a
@@ -727,7 +900,8 @@ const Mymag = () => {
                       fontWeight: fontWeight,
                       letterSpacing: "3px",
                       marginRight: `${wordSpacing}px`,
-                      whiteSpace: "nowrap",
+                      whiteSpace: "normal",
+                      wordBreak: "break-word",
                       display: "inline-block",
                     }}
                   >
@@ -739,13 +913,15 @@ const Mymag = () => {
                   className="text-row"
                   style={{
                     display: "flex",
-                    flexDirection: showAsRTL ? "row-reverse" : "row",
-                    justifyContent: showAsRTL ? "flex-end" : "flex-start",
+                    flexDirection: "row",
+                    flexWrap: "wrap",
+                    justifyContent: lineIsRTL ? "flex-end" : "flex-start",
+                    direction: lineIsRTL ? "rtl" : "ltr",
+                    unicodeBidi: "isolate",
+                    width: "100%",
                   }}
                 >
-                  {(showAsRTL ? lineText.split(/\s+/).filter(Boolean).reverse()
-                              : lineText.split(/\s+/).filter(Boolean)
-                  ).map((word, wordIndex) => (
+                  {lineText.split(/\s+/).filter(Boolean).map((word, wordIndex) => (
                     <span
                       key={wordIndex}
                       className="text-word"
@@ -757,10 +933,15 @@ const Mymag = () => {
                         fontWeight: fontWeight,
                         letterSpacing: "3px",
                         textShadow: showShadow ? "2px 2px 3px yellow" : "none",
-                        marginRight: `${wordSpacing}px`,
-                        whiteSpace: "nowrap",
-                        direction: showAsRTL ? "rtl" : "ltr",
+                        marginInlineEnd: `${wordSpacing}px`,
+                        marginRight: 0,
+                        whiteSpace: "normal",
+                        wordBreak: "break-word",
+                        overflowWrap: "anywhere",
+                        direction: lineIsRTL ? "rtl" : "ltr",
+                        unicodeBidi: "isolate",
                         display: "inline-block",
+                        maxWidth: "100%",
                       }}
                     >
                       {word.split("").map((char, charIndex, arr) => {
@@ -768,7 +949,7 @@ const Mymag = () => {
                         const mapped = letterColors[char];
 
                         if (item.isSplitProduct && item.splitKind !== "hyphenWord" && item.splitKind !== "twoWordWrap") {
-                          color = mapped || "#6b7280"; // gray default for split lines; keep overrides
+                          color = mapped || "#6b7280";
                         } else if (
                           item.isSplitProduct &&
                           item.splitKind === "hyphenWord" &&
@@ -776,7 +957,7 @@ const Mymag = () => {
                           char === "-" &&
                           charIndex === arr.length - 1
                         ) {
-                          color = "#6b7280"; // gray hyphen only
+                          color = "#6b7280";
                         } else if (mapped) {
                           color = mapped;
                         }
@@ -800,7 +981,7 @@ const Mymag = () => {
       {showInfoModal && (
         <div className="modal-overlay" onClick={() => setShowInfoModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <button className="modal-close-x" onClick={() => setShowInfoModal(false)}>
+            <button className="modal-close-x" onClick={() => setShowInfoModal(false)} aria-label="Close">
               <i className="fa-solid fa-xmark"></i>
             </button>
             <h2><i className="fa-solid fa-book-open"></i> About <strong>MyMag</strong></h2>

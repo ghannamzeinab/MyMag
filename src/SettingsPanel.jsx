@@ -1,18 +1,20 @@
 import React, { useMemo, useState } from "react";
 import "./SettingsPanel.css";
 
-// Two options only: Thin and Bold
 const WEIGHT_OPTIONS = [
   { label: "Thin", value: 300 },
   { label: "Bold", value: 700 },
 ];
 
-// Smart speed presets (ms per line)
+/* Auto-scroll pace — realistic values in ms per line.
+   Approx scroll velocities for a ~150 px line height:
+   - Slow:   ~25 px/s  (relaxed reading)
+   - Normal: ~50 px/s  (comfortable reading)
+   - Fast:  ~125 px/s  (skimming) */
 const SPEED_PRESETS = [
-  { key: "slow", label: "Slow", ms: 90000 },
-  { key: "normal", label: "Normal (55,555 ms)", ms: 55555 },
-  { key: "faster", label: "A bit faster", ms: 35000 },
-  { key: "fast", label: "Fast", ms: 15000 },
+  { key: "slow",   label: "Slow",   ms: 6000 },
+  { key: "normal", label: "Normal", ms: 3000 },
+  { key: "fast",   label: "Fast",   ms: 1200 },
 ];
 
 const SettingsPanel = ({
@@ -30,13 +32,10 @@ const SettingsPanel = ({
   onResetDefaults,
   showAsRTL,
   setShowAsRTL,
-
-  // customizations
   darkMode,
   setDarkMode,
   bodyBgColor,
   setBodyBgColor,
-  // Button color props kept for backward compatibility (not exposed as controls here)
   btnBgLeft,
   setBtnBgLeft,
   btnBgRight,
@@ -51,10 +50,14 @@ const SettingsPanel = ({
   setShowTextArea,
   showShadow,
   setShowShadow,
+  currentLineIntensity,
+  setCurrentLineIntensity,
 }) => {
   const [newChar, setNewChar] = useState("");
   const [newColor, setNewColor] = useState("#000000");
   const [showFontWeightInfo, setShowFontWeightInfo] = useState(false);
+  const [showSpeedInfo, setShowSpeedInfo] = useState(false);
+  const [showLineHiInfo, setShowLineHiInfo] = useState(false);
 
   const handleAddConfusingChar = () => {
     if (newChar && newColor) {
@@ -65,10 +68,9 @@ const SettingsPanel = ({
   };
 
   const activeSpeedKey = useMemo(() => {
-    const list = SPEED_PRESETS;
-    let best = list[0].key;
+    let best = SPEED_PRESETS[0].key;
     let bestDiff = Infinity;
-    list.forEach((p) => {
+    SPEED_PRESETS.forEach((p) => {
       const d = Math.abs((autoIntervalMs ?? 0) - p.ms);
       if (d < bestDiff) {
         bestDiff = d;
@@ -83,6 +85,8 @@ const SettingsPanel = ({
     if (found) setAutoIntervalMs(found.ms);
   };
 
+  const lineHi = Number(currentLineIntensity) || 0;
+
   return (
     <div
       className={`settings-modal ${className}`}
@@ -91,7 +95,6 @@ const SettingsPanel = ({
       aria-modal="true"
       aria-labelledby="settings-title"
     >
-      {/* Sticky close button */}
       <button
         className="settings-close-button"
         onClick={() => setIsSettingsOpen(false)}
@@ -101,12 +104,10 @@ const SettingsPanel = ({
         <i className="fa-solid fa-xmark"></i>
       </button>
 
-      {/* Title (H2 in this earlier working build) */}
       <h2 className="settings-title" id="settings-title">
         <i className="fa-solid fa-gear" aria-hidden="true"></i> Settings
       </h2>
 
-      {/* Font Size slider */}
       <div className="settings-row settings-row-full">
         <label className="slider-label" htmlFor="fontSizeRange">
           Font Size: <span className="slider-value">{fontSize}px</span>
@@ -125,7 +126,6 @@ const SettingsPanel = ({
         />
       </div>
 
-      {/* Word Space slider */}
       <div className="settings-row settings-row-full">
         <label className="slider-label" htmlFor="wordSpaceRange">
           Word Space: <span className="slider-value">{wordSpacing}px</span>
@@ -144,7 +144,58 @@ const SettingsPanel = ({
         />
       </div>
 
-      {/* Show/Hide character shadow */}
+      {/* Current-line brightness slider */}
+      <div className="settings-row settings-row-full">
+        <div className="label-wrapper">
+          <label className="slider-label" htmlFor="lineHiRange">
+            Current Line Brightness:{" "}
+            <span className="slider-value">{lineHi === 0 ? "Off" : `${lineHi}%`}</span>
+          </label>
+          <button
+            className="info-icon-button"
+            title="Current line brightness info"
+            onClick={() => setShowLineHiInfo(true)}
+            aria-label="Current line brightness info"
+          >
+            <i className="fa-solid fa-circle-info" aria-hidden="true"></i>
+          </button>
+        </div>
+        <input
+          id="lineHiRange"
+          type="range"
+          min={0}
+          max={100}
+          step={1}
+          value={lineHi}
+          onChange={(e) =>
+            setCurrentLineIntensity(parseInt(e.target.value, 10) || 0)
+          }
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={lineHi}
+        />
+        <div
+          aria-hidden="true"
+          style={{
+            marginTop: 6,
+            height: 22,
+            borderRadius: 8,
+            border: "0.5px solid #d1d5db",
+            background:
+              lineHi === 0
+                ? "transparent"
+                : `rgba(250, 204, 21, ${((lineHi / 100) * 0.85).toFixed(3)})`,
+            boxShadow:
+              lineHi === 0
+                ? "none"
+                : `inset 0 0 0 2px rgba(250, 204, 21, ${Math.min(
+                    0.7,
+                    (lineHi / 100) * 0.7
+                  ).toFixed(3)})`,
+          }}
+        />
+      </div>
+
       <div className="settings-row">
         <label>Show Character Shadow:</label>
         <div className="toggle-wrap">
@@ -159,7 +210,6 @@ const SettingsPanel = ({
         </div>
       </div>
 
-      {/* Font weight radio pill buttons */}
       <div className="settings-row settings-row-full">
         <div className="label-wrapper">
           <label>Font Weight:</label>
@@ -195,83 +245,20 @@ const SettingsPanel = ({
         </div>
       </div>
 
-      {/* Reading Direction */}
-      <div className="settings-row">
-        <label>Reading Direction:</label>
-        <div className="toggle-wrap">
-          <button
-            className="toggle-btn"
-            onClick={() => setShowAsRTL(!showAsRTL)}
-            title="Toggle Right-to-Left"
-            aria-pressed={showAsRTL}
-          >
-            {showAsRTL ? "RTL" : "LTR"}
-          </button>
-        </div>
-      </div>
-
-      {/* Dark mode */}
-      <div className="settings-row">
-        <label>Dark Mode:</label>
-        <div className="toggle-wrap">
-          <button
-            className={`toggle-btn ${darkMode ? "active" : ""}`}
-            onClick={() => setDarkMode(!darkMode)}
-            aria-pressed={darkMode}
-            title="Toggle dark mode"
-          >
-            {darkMode ? "On" : "Off"}
-          </button>
-        </div>
-      </div>
-
-      {/* Page background */}
-      <div className="settings-row">
-        <label>Page Background:</label>
-        <input
-          type="color"
-          value={bodyBgColor}
-          onChange={(e) => setBodyBgColor(e.target.value)}
-          title="Background color of the page"
-        />
-      </div>
-
-      {/* Display border toggle */}
-      <div className="settings-row">
-        <label>Display Border:</label>
-        <div className="toggle-wrap">
-          <button
-            className="toggle-btn"
-            onClick={() => setShowBorder((v) => !v)}
-            aria-pressed={showBorder}
-            title="Show/Hide display border"
-          >
-            {showBorder ? "Shown" : "Hidden"}
-          </button>
-        </div>
-      </div>
-
-      {/* Text area toggle */}
-      <div className="settings-row">
-        <label>Text Area:</label>
-        <div className="toggle-wrap">
-          <button
-            className="toggle-btn"
-            onClick={() => setShowTextArea((v) => !v)}
-            aria-pressed={showTextArea}
-            title="Show/Hide text input"
-          >
-            {showTextArea ? "Shown" : "Hidden"}
-          </button>
-        </div>
-      </div>
-
-      {/* Auto-scroll speed presets (ms per line) */}
+      {/* Auto-scroll Pace */}
       <div className="settings-row settings-row-full">
         <div className="label-wrapper">
-          <label>Auto-scroll speed (ms per line — higher = slower):</label>
+          <label>Auto-scroll Pace:</label>
+          <button
+            className="info-icon-button"
+            title="Auto-scroll pace info"
+            onClick={() => setShowSpeedInfo(true)}
+            aria-label="Auto-scroll pace info"
+          >
+            <i className="fa-solid fa-circle-info" aria-hidden="true"></i>
+          </button>
         </div>
-        <div className="weight-group" role="radiogroup" aria-label="Auto-scroll speed">
+        <div className="weight-group" role="radiogroup" aria-label="Auto-scroll pace">
           {SPEED_PRESETS.map((p) => {
             const id = `speed-${p.key}`;
             const checked = activeSpeedKey === p.key;
@@ -295,7 +282,72 @@ const SettingsPanel = ({
         </div>
       </div>
 
-      {/* Confusing Characters */}
+      <div className="settings-row">
+        <label>Reading Direction:</label>
+        <div className="toggle-wrap">
+          <button
+            className="toggle-btn"
+            onClick={() => setShowAsRTL(!showAsRTL)}
+            title="Toggle Right-to-Left"
+            aria-pressed={showAsRTL}
+          >
+            {showAsRTL ? "RTL" : "LTR"}
+          </button>
+        </div>
+      </div>
+
+      <div className="settings-row">
+        <label>Dark Mode:</label>
+        <div className="toggle-wrap">
+          <button
+            className={`toggle-btn ${darkMode ? "active" : ""}`}
+            onClick={() => setDarkMode(!darkMode)}
+            aria-pressed={darkMode}
+            title="Toggle dark mode"
+          >
+            {darkMode ? "On" : "Off"}
+          </button>
+        </div>
+      </div>
+
+      <div className="settings-row">
+        <label>Page Background:</label>
+        <input
+          type="color"
+          value={bodyBgColor}
+          onChange={(e) => setBodyBgColor(e.target.value)}
+          title="Background color of the page"
+        />
+      </div>
+
+      <div className="settings-row">
+        <label>Display Border:</label>
+        <div className="toggle-wrap">
+          <button
+            className="toggle-btn"
+            onClick={() => setShowBorder((v) => !v)}
+            aria-pressed={showBorder}
+            title="Show/Hide display border"
+          >
+            {showBorder ? "Shown" : "Hidden"}
+          </button>
+        </div>
+      </div>
+
+      <div className="settings-row">
+        <label>Text Area:</label>
+        <div className="toggle-wrap">
+          <button
+            className="toggle-btn"
+            onClick={() => setShowTextArea((v) => !v)}
+            aria-pressed={showTextArea}
+            title="Show/Hide text input"
+          >
+            {showTextArea ? "Shown" : "Hidden"}
+          </button>
+        </div>
+      </div>
+
       <p className="section-label">Confusing Characters:</p>
       <div className="confusing-input-row">
         <label htmlFor="char-input">Char:</label>
@@ -329,13 +381,12 @@ const SettingsPanel = ({
         ))}
       </ul>
 
-      {/* Actions */}
       <div className="settings-actions">
         <button
           className="save-btn"
           onClick={() => {
             onSaveSettings && onSaveSettings();
-            setIsSettingsOpen(false); // close after save
+            setIsSettingsOpen(false);
           }}
           title="Save settings to local storage"
         >
@@ -372,6 +423,57 @@ const SettingsPanel = ({
               300 – Thin<br />
               700 – Bold<br />
               (Other weights are disabled)
+            </p>
+          </div>
+        </div>
+      )}
+
+      {showSpeedInfo && (
+        <div className="modal-overlay" onClick={() => setShowSpeedInfo(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <button
+              className="modal-close-x"
+              onClick={() => setShowSpeedInfo(false)}
+              aria-label="Close auto-scroll pace info"
+            >
+              <i className="fa-solid fa-xmark"></i>
+            </button>
+            <h2>
+              <i className="fa-solid fa-gauge-high" aria-hidden="true"></i> Auto-scroll Pace
+            </h2>
+            <p>
+              <strong>Slow</strong> — ~6 seconds per line, relaxed reading.<br />
+              <strong>Normal</strong> — ~3 seconds per line, comfortable reading.<br />
+              <strong>Fast</strong> — ~1.2 seconds per line, skimming.<br /><br />
+              Press the <i className="fa-solid fa-play" aria-hidden="true"></i> /{" "}
+              <i className="fa-solid fa-pause" aria-hidden="true"></i> button on the left bar to start or stop.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {showLineHiInfo && (
+        <div className="modal-overlay" onClick={() => setShowLineHiInfo(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <button
+              className="modal-close-x"
+              onClick={() => setShowLineHiInfo(false)}
+              aria-label="Close current line brightness info"
+            >
+              <i className="fa-solid fa-xmark"></i>
+            </button>
+            <h2>
+              <i className="fa-solid fa-highlighter" aria-hidden="true"></i> Current Line Brightness
+            </h2>
+            <p>
+              Controls how bright the highlight is behind the line you are currently reading.
+              <br /><br />
+              <strong>0</strong> — Off (no highlight).<br />
+              <strong>35</strong> — Subtle (the default).<br />
+              <strong>70+</strong> — Strong, easy to spot.<br />
+              <strong>100</strong> — Brightest.
+              <br /><br />
+              The highlight auto-adapts for dark mode so the text below it stays readable.
             </p>
           </div>
         </div>
