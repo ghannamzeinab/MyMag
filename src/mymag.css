@@ -8,7 +8,6 @@ body {
     /* light gray default; JS will override on mode/color changes */
     min-height: 100%;
 }
-
 * {
     scrollbar-color: yellow black;
 }
@@ -43,12 +42,30 @@ body {
     box-sizing: border-box;
 }
 
-.text-input {
+/* The text box is always pinned to the top of the window (position: fixed,
+   which behaves the same in every browser), so it never scrolls away while
+   reading or typing. This bar only reserves its place in the page flow. */
+.text-input-bar {
     width: 80%;
+    height: 60px;
+    flex-shrink: 0;
+}
+
+.text-input {
+    position: fixed;
+    top: 20px;
+    left: 50vw;
+    transform: translateX(-50%);
+    width: calc((100vw - 40px) * 0.8);
     height: 50px;
+    max-height: 40vh;
     padding: 10px;
     font-size: 16px;
-    margin-bottom: 10px;
+    margin: 0;
+    box-sizing: border-box;
+    resize: vertical;
+    z-index: 500;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 /* Display area — wrap-safe (no horizontal scroll, words can break) */
@@ -284,6 +301,10 @@ textarea {
         display: none !important;
     }
 
+    .text-input-bar {
+        display: none !important;
+    }
+
     .text-output {
         white-space: normal !important;
         overflow-wrap: break-word;
@@ -295,12 +316,21 @@ textarea {
     }
 }
 
+/* Formulas: font size comes from the settings (inline style). A formula
+   wider than the display scrolls sideways inside its own box. */
 .math-block {
     font-size: 2em;
-    margin: 30px auto;
+    margin: 10px 0;
     text-align: center;
     font-family: "KaTeX_Main", serif;
     line-height: 1.6;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+.math-block .katex-display {
+    margin: 0.2em 0;
 }
 
 /* Settings panel buttons */

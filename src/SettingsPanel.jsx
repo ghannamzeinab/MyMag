@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import "./SettingsPanel.css";
 
 const WEIGHT_OPTIONS = [
@@ -6,16 +6,6 @@ const WEIGHT_OPTIONS = [
   { label: "Bold", value: 700 },
 ];
 
-/* Auto-scroll pace — realistic values in ms per line.
-   Approx scroll velocities for a ~150 px line height:
-   - Slow:   ~25 px/s  (relaxed reading)
-   - Normal: ~50 px/s  (comfortable reading)
-   - Fast:  ~125 px/s  (skimming) */
-const SPEED_PRESETS = [
-  { key: "slow",   label: "Slow",   ms: 6000 },
-  { key: "normal", label: "Normal", ms: 3000 },
-  { key: "fast",   label: "Fast",   ms: 1200 },
-];
 
 const SettingsPanel = ({
   fontSize,
@@ -42,8 +32,10 @@ const SettingsPanel = ({
   setBtnBgRight,
   showFloatingButtons,
   setShowFloatingButtons,
-  autoIntervalMs,
-  setAutoIntervalMs,
+  autoWpm,
+  setAutoWpm,
+  wpmMin = 10,
+  wpmMax = 300,
   showBorder,
   setShowBorder,
   showTextArea,
@@ -65,24 +57,6 @@ const SettingsPanel = ({
       setNewChar("");
       setNewColor("#000000");
     }
-  };
-
-  const activeSpeedKey = useMemo(() => {
-    let best = SPEED_PRESETS[0].key;
-    let bestDiff = Infinity;
-    SPEED_PRESETS.forEach((p) => {
-      const d = Math.abs((autoIntervalMs ?? 0) - p.ms);
-      if (d < bestDiff) {
-        bestDiff = d;
-        best = p.key;
-      }
-    });
-    return best;
-  }, [autoIntervalMs]);
-
-  const handleSpeedChange = (key) => {
-    const found = SPEED_PRESETS.find((p) => p.key === key);
-    if (found) setAutoIntervalMs(found.ms);
   };
 
   const lineHi = Number(currentLineIntensity) || 0;
@@ -248,7 +222,21 @@ const SettingsPanel = ({
       {/* Auto-scroll Pace */}
       <div className="settings-row settings-row-full">
         <div className="label-wrapper">
-          <label>Auto-scroll Pace:</label>
+          <label
+            className="slider-label"
+            htmlFor="autoWpmRange"
+            style={{
+              backgroundColor: "#fde047",
+              color: "#000000",
+              padding: "6px 10px",
+              borderRadius: 8,
+              border: "2px solid #000000",
+            }}
+          >
+            <i className="fa-solid fa-play" aria-hidden="true"></i>{" "}
+            Auto-scroll Speed:{" "}
+            <span className="slider-value" style={{ color: "#1e3a8a" }}>{autoWpm} words/min</span>
+          </label>
           <button
             className="info-icon-button"
             title="Auto-scroll pace info"
@@ -258,27 +246,25 @@ const SettingsPanel = ({
             <i className="fa-solid fa-circle-info" aria-hidden="true"></i>
           </button>
         </div>
-        <div className="weight-group" role="radiogroup" aria-label="Auto-scroll pace">
-          {SPEED_PRESETS.map((p) => {
-            const id = `speed-${p.key}`;
-            const checked = activeSpeedKey === p.key;
-            return (
-              <div className="weight-option" key={p.key}>
-                <input
-                  id={id}
-                  className="weight-input"
-                  type="radio"
-                  name="auto-speed"
-                  value={p.key}
-                  checked={checked}
-                  onChange={() => handleSpeedChange(p.key)}
-                />
-                <label className="weight-label" htmlFor={id}>
-                  {p.label}
-                </label>
-              </div>
-            );
-          })}
+        <input
+          id="autoWpmRange"
+          type="range"
+          min={wpmMin}
+          max={wpmMax}
+          step={5}
+          value={autoWpm}
+          onChange={(e) => setAutoWpm(parseInt(e.target.value, 10) || wpmMin)}
+          aria-valuemin={wpmMin}
+          aria-valuemax={wpmMax}
+          aria-valuenow={autoWpm}
+          aria-valuetext={`${autoWpm} words per minute`}
+        />
+        <div
+          aria-hidden="true"
+          style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginTop: 4 }}
+        >
+          <span>Slower</span>
+          <span>Faster</span>
         </div>
       </div>
 
@@ -439,12 +425,22 @@ const SettingsPanel = ({
               <i className="fa-solid fa-xmark"></i>
             </button>
             <h2>
-              <i className="fa-solid fa-gauge-high" aria-hidden="true"></i> Auto-scroll Pace
+              <i className="fa-solid fa-gauge-high" aria-hidden="true"></i> Auto-scroll Speed
             </h2>
             <p>
-              <strong>Slow</strong> — ~6 seconds per line, relaxed reading.<br />
-              <strong>Normal</strong> — ~3 seconds per line, comfortable reading.<br />
-              <strong>Fast</strong> — ~1.2 seconds per line, skimming.<br /><br />
+              Set how many <strong>words per minute</strong> you want to read.
+              <br /><br />
+              The scrolling adapts by itself to your font size, word spacing and
+              window size, so the same number feels the same with small or very
+              large text. With very large text (one or two words per row) it
+              slows down a little more, so each row stays long enough to follow.
+              <br /><br />
+              <strong>30–60</strong> — relaxed reading.<br />
+              <strong>80</strong> — the default.<br />
+              <strong>150+</strong> — skimming.<br /><br />
+              You can move the slider while the text is scrolling.<br /><br />
+              Keyboard: <strong>Space</strong> starts / pauses, <strong>Esc</strong> pauses
+              (when you are not typing in the text box).<br /><br />
               Press the <i className="fa-solid fa-play" aria-hidden="true"></i> /{" "}
               <i className="fa-solid fa-pause" aria-hidden="true"></i> button on the left bar to start or stop.
             </p>
