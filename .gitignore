@@ -21,3 +21,8 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# browser extension build: keep only the zip files
+/browser-extensions/chrome/
+/browser-extensions/firefox/
+/browser-extensions/.build/

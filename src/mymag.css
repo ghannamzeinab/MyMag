@@ -68,6 +68,35 @@ body {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
+/* Extension only: small red button that closes MyMag (same as Esc). */
+.ext-close-button {
+    position: fixed;
+    top: 8px;
+    left: 8px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 2px solid #ffffff;
+    background-color: #dc2626;
+    color: #ffffff;
+    font-size: 20px;
+    font-weight: 900;
+    line-height: 1;
+    cursor: pointer;
+    z-index: 1001;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+}
+
+.ext-close-button:hover,
+.ext-close-button:focus-visible {
+    background-color: #b91c1c;
+    outline: 3px solid #fde047;
+}
+
 /* Display area — wrap-safe (no horizontal scroll, words can break) */
 .text-output {
     width: 80%;

@@ -1,0 +1,52 @@
+{
+  "manifest_version": 3,
+  "name": "MyMag",
+  "version": "__VERSION__",
+  "description": "Select text on any page, press Ctrl+M (or right-click) and read it enlarged with MyMag. Esc closes.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "Read selection with MyMag (Ctrl+M)",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "contextMenus",
+    "storage",
+    "clipboardRead"
+  ],
+  "commands": {
+    "open-mymag": {
+      "suggested_key": {
+        "default": "Ctrl+M",
+        "mac": "MacCtrl+M"
+      },
+      "description": "Read the selected text with MyMag"
+    }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "index.html",
+        "static/*",
+        "fontawesome/*",
+        "icon.png",
+        "mymag.png"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
+}

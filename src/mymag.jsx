@@ -6,6 +6,28 @@ import katex from "katex";
 import "katex/dist/katex.min.css";
 
 const STORAGE_KEY = "mymagSettings";
+
+/* ---------- Browser-extension mode ----------
+   Only active when the app runs inside the MyMag extension; on the website
+   extApi is null and nothing below changes.
+   mode=overlay : shown in a full-window overlay on top of a web page
+   mode=tab     : shown in its own tab (pages that do not allow an overlay) */
+const extApi =
+  typeof window !== "undefined" && window.chrome && window.chrome.runtime && window.chrome.runtime.id
+    ? window.chrome
+    : null;
+const extMode = extApi ? new URLSearchParams(window.location.search).get("mode") : null;
+const PENDING_KEY = "mymagPendingText"; // selected text handed over by the extension
+const CLIPBOARD_KEY = "mymagPendingClipboard"; // true: no selection readable, use copied text
+const closeExtension = () => {
+  try {
+    if (extMode === "overlay") {
+      window.parent.postMessage({ type: "mymag-close" }, "*");
+    } else if (extMode === "tab") {
+      extApi.tabs.getCurrent((t) => { if (t) extApi.tabs.remove(t.id); });
+    }
+  } catch {}
+};
 const LONG_THRESHOLD = 16;
 const TWO_WORD_WRAP_THRESHOLD = 140;
 
@@ -549,13 +571,18 @@ const Mymag = () => {
 
   /* -------- Load persisted settings + migrate old slow speeds -------- */
   useEffect(() => {
+    let local = null;
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       const cookie = document.cookie
         .split("; ")
         .find((row) => row.startsWith(encodeURIComponent(STORAGE_KEY) + "="))
         ?.split("=")[1];
-      const txt = raw ?? (cookie ? decodeURIComponent(cookie) : null);
+      local = raw ?? (cookie ? decodeURIComponent(cookie) : null);
+    } catch {}
+
+    const apply = (txt) => {
+    try {
       if (txt) {
         const s = JSON.parse(txt);
         if (typeof s.fontSize === "number") setFontSize(s.fontSize);
@@ -577,6 +604,36 @@ const Mymag = () => {
         if (typeof s.currentLineIntensity === "number") setCurrentLineIntensity(s.currentLineIntensity);
       }
     } catch {}
+    };
+
+    apply(local);
+
+    // Extension: settings are kept in the extension's own storage (the same
+    // on every website), and the selected text is waiting there too.
+    if (extApi) {
+      try {
+        extApi.storage.local.get([STORAGE_KEY, PENDING_KEY, CLIPBOARD_KEY], (r) => {
+          if (!r) return;
+          if (typeof r[STORAGE_KEY] === "string") apply(r[STORAGE_KEY]);
+          if (typeof r[PENDING_KEY] === "string") setText(r[PENDING_KEY]);
+          // PDF viewers hide the selection from extensions on a keyboard
+          // shortcut: fall back to the text the user copied (Ctrl+C).
+          if (r[CLIPBOARD_KEY] === true && !(r[PENDING_KEY] || "").trim()) {
+            const readClip = () =>
+              navigator.clipboard.readText().then((t) => { if (t && t.trim()) setText(t); });
+            readClip().catch(() => {
+              // needs the window to be focused — try once more when it is
+              const once = () => {
+                window.removeEventListener("focus", once);
+                readClip().catch(() => {});
+              };
+              window.addEventListener("focus", once);
+            });
+          }
+          extApi.storage.local.remove([PENDING_KEY, CLIPBOARD_KEY]);
+        });
+      } catch {}
+    }
   }, []);
 
   useEffect(() => {
@@ -593,6 +650,7 @@ const Mymag = () => {
       autoWpm, showBorder, showTextArea, showShadow, currentLineIntensity,
     });
     try { localStorage.setItem(STORAGE_KEY, payload); } catch {}
+    try { if (extApi) extApi.storage.local.set({ [STORAGE_KEY]: payload }); } catch {}
     try {
       const expires = new Date(Date.now() + 365 * 864e5).toUTCString();
       document.cookie = `${encodeURIComponent(STORAGE_KEY)}=${encodeURIComponent(payload)}; expires=${expires}; path=/; SameSite=Lax`;
@@ -601,6 +659,7 @@ const Mymag = () => {
 
   const resetToDefaults = () => {
     try { localStorage.removeItem(STORAGE_KEY); } catch {}
+    try { if (extApi) extApi.storage.local.remove(STORAGE_KEY); } catch {}
     try {
       document.cookie = `${encodeURIComponent(STORAGE_KEY)}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax`;
     } catch {}
@@ -883,6 +942,12 @@ const Mymag = () => {
   useEffect(() => {
     const onKeyDown = (e) => {
       if (e.ctrlKey || e.altKey || e.metaKey) return;
+      // In the extension, Esc always closes MyMag (even while typing).
+      if (e.key === "Escape" && extMode) {
+        e.preventDefault();
+        closeExtension();
+        return;
+      }
       const t = e.target;
       const tag = (t && t.tagName) || "";
       if (tag === "TEXTAREA" || tag === "INPUT" || tag === "SELECT" || (t && t.isContentEditable)) return;
@@ -1008,6 +1073,17 @@ const Mymag = () => {
         currentLineIntensity={currentLineIntensity}
         setCurrentLineIntensity={setCurrentLineIntensity}
       />
+
+      {extMode && (
+        <button
+          className="ext-close-button"
+          onClick={closeExtension}
+          title="Close MyMag (Esc)"
+          aria-label="Close MyMag"
+        >
+          <i className="fa-solid fa-xmark" aria-hidden="true"></i>
+        </button>
+      )}
 
       {showFloatingButtons && (
         <div className="left-floating-buttons">
